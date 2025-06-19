@@ -982,3 +982,48 @@ class SACBuilder(NetworkBuilder):
                 self.is_discrete = False
                 self.is_continuous = False
 
+
+
+
+# for payload
+from rl_games.algos_torch.models import *
+from rl_games.algos_torch.network_builder import *
+
+class EstimatorBuilder(A2CBuilder):
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+    def build(self, name, **kwargs):
+        if name == 'estimator_net':
+            net_config = self._get_net_config(kwargs['obs_shape'], kwargs['action_space'])
+            return EstimatorNet(net_config)
+        else:
+            return super().build(name, **kwargs)
+
+    class EstimatorNet(A2CBuilder.Network):
+        def __init__(self, params, **kwargs):
+            super().__init__(params, **kwargs)
+            estimator_config = self.params['estimator']
+            self.estimator_head = self._build_mlp(
+                input_size=self.units[-1],
+                output_size=1,
+                layers=estimator_config['layers']
+            )
+
+        def forward(self, input_dict):
+            policy_observation = input_dict['obs']
+            ground_truth_payload = input_dict['ground_truth_payload']
+
+            common_features = self.mlp(policy_observation)
+            value = self.value_act(self.critic_linear(common_features))
+            mu = self.mu_act(self.mu_linear(common_features))
+            estimated_payload = self.estimator_head(common_features)
+            payload_loss = torch.nn.functional.mse_loss(estimated_payload, ground_truth_payload)
+
+            res_dict = {
+                'mus': mu,
+                'log_std': self.log_std,
+                'values': value,
+                'payload_loss': payload_loss,
+                'estimates': estimated_payload.detach()
+            }
+            return res_dict

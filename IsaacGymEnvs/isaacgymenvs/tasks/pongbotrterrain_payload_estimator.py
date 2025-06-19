@@ -748,7 +748,7 @@ class PongBotRTerrainPayloadEstimator(VecTask):
                                     self.actions,                 # 12  [33:45]
                                     self.sin_cycle,               # 4   [45:49]        
                                     self.cos_cycle,               # 4   [49:53]
-                                    self.estimated_payload        # plyload estimator에서 나온 추정값을 obs에 넣어줌
+                                    self.estimated_payload        # plyload estimator에서 나온 추정값을 obs에 넣어줌, 정책이 사용할 t-1 시점의 추정값??? 왜 시점이 전 스텝이지?
                                     ), dim=-1)                    # 54  
         
         # obs에 노이즈 추가
@@ -1756,7 +1756,14 @@ class PongBotRTerrainPayloadEstimator(VecTask):
         # 4. 계산된 오차를 'extras' 버퍼에 저장하여 RL 훈련 알고리즘에 전달
         self.extras["payload_error"] = payload_estimation_error
 
-        
+        # <<< 추가 >>>
+        # 매 스텝마다 'extras' 버퍼에 손실 계산에 필요한 '실제 페이로드' 값을 넣어줍니다.
+        # 이 정보는 a2c_common.py에서 읽어갑니다.
+        self.extras["ground_truth_payload"] = self.payloads.unsqueeze(-1) # 차원을 맞춰줍니다 (num_envs, 1)
+
+    # for payload
+    def update_estimates(self, new_estimates):
+        self.estimated_payload[:] = new_estimates        
 
     # 시뮬레이션 환경에서 카메라 시점을 자동으로 갱신해주는 함수
     def camera_update(self):

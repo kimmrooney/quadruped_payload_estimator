@@ -338,6 +338,14 @@ class ExperienceBuffer:
         self.tensor_dict['neglogpacs'] = self._create_tensor_from_space(gym.spaces.Box(low=0, high=1,shape=(), dtype=np.float32), obs_base_shape)
         self.tensor_dict['dones'] = self._create_tensor_from_space(gym.spaces.Box(low=0, high=1,shape=(), dtype=np.uint8), obs_base_shape)
 
+
+        # for payload
+        # 1. 페이로드(1개의 float 값)를 위한 gym 공간(space)을 정의합니다.
+        payload_space = gym.spaces.Box(low=0, high=1, shape=(1,), dtype=np.float32)
+        # 2. 정의한 공간을 이용해 'ground_truth_payload' 텐서를 생성하고 딕셔너리에 추가합니다.
+        self.tensor_dict['ground_truth_payload'] = self._create_tensor_from_space(payload_space, obs_base_shape)
+
+
         if self.is_discrete or self.is_multi_discrete:
             self.tensor_dict['actions'] = self._create_tensor_from_space(gym.spaces.Box(low=0, high=1,shape=self.actions_shape, dtype=int), obs_base_shape)
         if self.use_action_masks:
