@@ -74,6 +74,7 @@ params:
     clip_value: True
     seq_len: 4 # only for rnn
     bounds_loss_coef: 0.
+    estimator_coef: 1.0   # payload , 페이로드 추정 손실의 중요도를 조절하는 가중치, 1.0은 어떤 의미?
 
     max_epochs: ${resolve_default:50000,${....max_iterations}}
     save_best_after: 100

@@ -264,6 +264,12 @@ class PongBotRTerrainPayloadEstimator(VecTask):
         # 이전 속도 방향 각도 저장
         self.prev_velocity_angles = torch.zeros(self.num_envs, device=self.device) 
 
+        # for payload
+        # 이전 스텝의 payload 추정값을 저장하기 위한 버퍼
+        # num_envs: 환경의 갯수, 1: payload 추정값 
+        self.estimated_payload = torch.zeros(self.num_envs, 1, device=self.device, dtype=torch.float)
+
+
         # 리셋 및 카메라 상태
         self.need_reset = False
         self.cam_mode = 0
@@ -742,6 +748,7 @@ class PongBotRTerrainPayloadEstimator(VecTask):
                                     self.actions,                 # 12  [33:45]
                                     self.sin_cycle,               # 4   [45:49]        
                                     self.cos_cycle,               # 4   [49:53]
+                                    self.estimated_payload        # plyload estimator에서 나온 추정값을 obs에 넣어줌
                                     ), dim=-1)                    # 54  
         
         # obs에 노이즈 추가
@@ -1726,6 +1733,30 @@ class PongBotRTerrainPayloadEstimator(VecTask):
         # 시뮬레이터 뷰어의 카메라 갱신 (관측 환경이 바뀌면)
         if self.cam_mode != 0:        
             self.camera_update()
+
+        # payload
+        # 1. 최신 페이로드 추정값 가져오기
+        # rl_games 에이전트는 'obs'를 받아 'actions', 'values', 'rnn_states' 등과 함께
+        # 'payload_estimate' 같은 추가적인 결과도 반환하도록 수정해야 합니다.
+        # 이 값은 actor_critic 네트워크에서 직접 나옵니다.
+        # 여기서는 그 값이 self.actor_critic.get_estimates()를 통해 얻어졌다고 가정합니다.
+        # 실제 구현 시에는 rl_games runner에서 이 값을 받아와야 합니다.
+        
+        # 이 예시에서는, `self.obs_buf`를 다시 네트워크에 넣어 현재 추정치를 얻는다고 가정하겠습니다.
+        # 실제로는 runner의 반환값을 사용해야 중복 계산이 없습니다.
+        current_payload_estimate = self.actor_critic.get_estimates(self.obs_buf) # get_estimates는 새로 만들어야 할 함수입니다. ???
+        
+        # 2. 다음 스텝의 observation을 위해 추정값 업데이트
+        self.estimated_payload[:] = current_payload_estimate
+
+        # 3. 추정 오차(Loss) 계산
+        # self.payloads는 시뮬레이션의 실제 페이로드 값입니다.
+        payload_estimation_error = torch.mean(torch.square(current_payload_estimate - self.payloads))  #????
+
+        # 4. 계산된 오차를 'extras' 버퍼에 저장하여 RL 훈련 알고리즘에 전달
+        self.extras["payload_error"] = payload_estimation_error
+
+        
 
     # 시뮬레이션 환경에서 카메라 시점을 자동으로 갱신해주는 함수
     def camera_update(self):
