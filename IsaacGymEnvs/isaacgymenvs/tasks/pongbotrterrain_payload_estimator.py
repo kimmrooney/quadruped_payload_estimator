@@ -50,7 +50,24 @@ import random
 from isaacgymenvs.utils.torch_jit_utils import quat_from_euler_xyz, quat_rotate,my_quat_rotate,quat_conjugate, to_torch, get_axis_params, torch_rand_float, normalize, quat_apply, quat_rotate_inverse,get_euler_xyz,matrix_to_quaternion,quat_mul
 from isaacgymenvs.tasks.base.vec_task import VecTask
 
+import torch.nn as nn      # for supervised learning payload
 # pongbotr_payload_estimator.py
+
+class PayloadEstimator(nn.Module):
+    def __init__(self,input_dim, output_dim=1):
+        super(PayloadEstimator, self).__init__()   
+        #입력: 로봇의 관절 시계열 데이터 및 imu 
+        #출력: 페이로드 질량
+        self.estimator = nn.Sequential(
+            nn.Linear(input_dim, 128),
+            nn.ReLU(),
+            nn.Linear(128, 64),
+            nn.ReLU(),
+            nn.Linear(64, output_dim)
+        )
+
+    def forward(self, x):
+        return self.estimator(x)
 
 
 class PongBotRTerrainPayloadEstimator(VecTask):
