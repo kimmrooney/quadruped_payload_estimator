@@ -740,15 +740,6 @@ class A2CBase(BaseAlgorithm):
                 res_dict = self.get_masked_action_values(self.obs, masks)
             else:
                 res_dict = self.get_action_values(self.obs)
-
-            # for payload
-            new_estimates = res_dict.get('estimates')
-            if new_estimates is not None:
-                # 이 함수는 우리가 1단계에서 pongbotrterrain_payload_estimator.py에 만들었던
-                # update_estimates 함수를 모든 환경에 대해 호출해줍니다.
-                self.vec_env.call('update_estimates', new_estimates)
-
-
             self.experience_buffer.update_data('obses', n, self.obs['obs'])
             self.experience_buffer.update_data('dones', n, self.dones)
 
@@ -768,10 +759,6 @@ class A2CBase(BaseAlgorithm):
                 shaped_rewards += self.gamma * res_dict['values'] * self.cast_obs(infos['time_outs']).unsqueeze(1).float()
 
             self.experience_buffer.update_data('rewards', n, shaped_rewards)
-
-            # for payload
-             # infos['extras'] 에서 'ground_truth_payload' 값을 가져와 버퍼에 업데이트합니다.
-            self.experience_buffer.update_data('ground_truth_payload', n, infos['extras']['ground_truth_payload'])
 
             self.current_rewards += rewards
             self.current_shaped_rewards += shaped_rewards
@@ -825,11 +812,6 @@ class A2CBase(BaseAlgorithm):
             else:
                 res_dict = self.get_action_values(self.obs)
 
-            # for payload
-            new_estimates = res_dict.get('estimates')
-            if new_estimates is not None:
-                self.vec_env.call('update_estimates', new_estimates)
-
             self.rnn_states = res_dict['rnn_states']
             self.experience_buffer.update_data('obses', n, self.obs['obs'])
             self.experience_buffer.update_data('dones', n, self.dones.byte())
@@ -851,11 +833,6 @@ class A2CBase(BaseAlgorithm):
                 shaped_rewards += self.gamma * res_dict['values'] * self.cast_obs(infos['time_outs']).unsqueeze(1).float()
 
             self.experience_buffer.update_data('rewards', n, shaped_rewards)
-
-
-            # for payload
-            # infos['extras'] 에서 'ground_truth_payload' 값을 가져와 버퍼에 업데이트합니다.
-            self.experience_buffer.update_data('ground_truth_payload', n, infos['extras']['ground_truth_payload'])
 
             self.current_rewards += rewards
             self.current_shaped_rewards += shaped_rewards
@@ -956,27 +933,17 @@ class DiscreteA2CBase(A2CBase):
         c_losses = []
         entropies = []
         kls = []
-
-        # for payload, 로깅을 위해 payload_losses 리스트를 만듬
-        payload_losses = []
-        
         if self.has_central_value:
             self.train_central_value()
 
         for mini_ep in range(0, self.mini_epochs_num):
             ep_kls = []
             for i in range(len(self.dataset)):
-                a_loss, c_loss, entropy, kl, last_lr, lr_mul, payload_losses  = self.train_actor_critic(self.dataset[i])
+                a_loss, c_loss, entropy, kl, last_lr, lr_mul = self.train_actor_critic(self.dataset[i])
                 a_losses.append(a_loss)
                 c_losses.append(c_loss)
                 ep_kls.append(kl)
                 entropies.append(entropy)
-
-                if self.bounds_loss_coef is not None:
-                    b_losses.append(b_loss)
-
-                # 3. 새로 받아온 payload_loss 값을 리스트에 추가합니다.
-                payload_losses.append(payload_loss)
 
             av_kls = torch_ext.mean_list(ep_kls)
             if self.multi_gpu:
@@ -995,7 +962,7 @@ class DiscreteA2CBase(A2CBase):
         update_time = update_time_end - update_time_start
         total_time = update_time_end - play_time_start
 
-        return batch_dict['step_time'], play_time, update_time, total_time, a_losses, c_losses, entropies, kls, last_lr, lr_mul, payload_losses
+        return batch_dict['step_time'], play_time, update_time, total_time, a_losses, c_losses, entropies, kls, last_lr, lr_mul
 
     def prepare_dataset(self, batch_dict):
         rnn_masks = batch_dict.get('rnn_masks', None)
@@ -1231,21 +1198,16 @@ class ContinuousA2CBase(A2CBase):
         entropies = []
         kls = []
 
-        # for payload
-        payload_losses = []
-
         for mini_ep in range(0, self.mini_epochs_num):
             ep_kls = []
             for i in range(len(self.dataset)):
-                a_loss, c_loss, entropy, kl, last_lr, lr_mul, cmu, csigma, b_loss, payload_loss = self.train_actor_critic(self.dataset[i])
+                a_loss, c_loss, entropy, kl, last_lr, lr_mul, cmu, csigma, b_loss = self.train_actor_critic(self.dataset[i])
                 a_losses.append(a_loss)
                 c_losses.append(c_loss)
                 ep_kls.append(kl)
                 entropies.append(entropy)
                 if self.bounds_loss_coef is not None:
                     b_losses.append(b_loss)
-
-                payload_losses.append(payload_loss)   # for payload
 
                 self.dataset.update_mu_sigma(cmu, csigma)
                 if self.schedule_type == 'legacy':
@@ -1274,7 +1236,7 @@ class ContinuousA2CBase(A2CBase):
         update_time = update_time_end - update_time_start
         total_time = update_time_end - play_time_start
 
-        return batch_dict['step_time'], play_time, update_time, total_time, a_losses, c_losses, b_losses, entropies, kls, last_lr, lr_mul, payload_losses
+        return batch_dict['step_time'], play_time, update_time, total_time, a_losses, c_losses, b_losses, entropies, kls, last_lr, lr_mul
 
     def prepare_dataset(self, batch_dict):
         obses = batch_dict['obses']
@@ -1353,7 +1315,7 @@ class ContinuousA2CBase(A2CBase):
 
         while True:
             epoch_num = self.update_epoch()
-            step_time, play_time, update_time, sum_time, a_losses, c_losses, b_losses, entropies, kls, last_lr, lr_mul, payload_losses = self.train_epoch()
+            step_time, play_time, update_time, sum_time, a_losses, c_losses, b_losses, entropies, kls, last_lr, lr_mul = self.train_epoch()
             total_time += sum_time
             frame = self.frame // self.num_agents
 
@@ -1378,12 +1340,6 @@ class ContinuousA2CBase(A2CBase):
 
                 if len(b_losses) > 0:
                     self.writer.add_scalar('losses/bounds_loss', torch_ext.mean_list(b_losses).item(), frame)
-
-                if len(payload_losses) > 0:
-                    self.writer.add_scalar('losses/payload_loss', torch_ext.mean_list(payload_losses).item(), frame)
-
-
-
 
                 if self.has_soft_aug:
                     self.writer.add_scalar('losses/aug_loss', np.mean(aug_losses), frame)

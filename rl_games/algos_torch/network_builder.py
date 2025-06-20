@@ -982,48 +982,95 @@ class SACBuilder(NetworkBuilder):
                 self.is_discrete = False
                 self.is_continuous = False
 
-
-
-
-# for payload
-from rl_games.algos_torch.models import *
-from rl_games.algos_torch.network_builder import *
-
 class EstimatorBuilder(A2CBuilder):
+    """
+    우리가 YAML 파일에서 'estimator_builder'를 지정했을 때,
+    rl-games가 이 클래스를 사용하여 네트워크를 생성합니다.
+    A2CBuilder를 상속받아 대부분의 기능을 그대로 사용합니다.
+    """
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
+
     def build(self, name, **kwargs):
+        # YAML 파일의 network.name이 'estimator_net'일 경우,
+        # 우리가 만든 EstimatorNet 클래스를 생성하여 반환합니다.
         if name == 'estimator_net':
-            net_config = self._get_net_config(kwargs['obs_shape'], kwargs['action_space'])
-            return EstimatorNet(net_config)
+            net = EstimatorBuilder.Network(self.params, **kwargs)
+            return net
         else:
+            # 그 외의 경우는 기본 A2CBuilder의 로직을 따릅니다.
             return super().build(name, **kwargs)
 
-    class EstimatorNet(A2CBuilder.Network):
+    class Network(A2CBuilder.Network):
+        """
+        Actor-Critic 기능에 더해 페이로드 추정(Estimation) 기능을 추가한
+        우리의 커스텀 신경망입니다.
+        """
         def __init__(self, params, **kwargs):
+            # 먼저 부모 클래스(A2CBuilder.Network)의 초기화 함수를 호출하여
+            # 기본적인 Actor-Critic 네트워크(MLP, value, mu, sigma 등)를 만듭니다.
             super().__init__(params, **kwargs)
+
+            # YAML 파일에서 정의한 'estimator' 설정을 가져옵니다.
             estimator_config = self.params['estimator']
+            estimator_layers = estimator_config.get('layers', [64])
+
+            # 공통 특징(feature)을 입력으로 받아 페이로드를 추정하는 '헤드'를 만듭니다.
             self.estimator_head = self._build_mlp(
-                input_size=self.units[-1],
-                output_size=1,
-                layers=estimator_config['layers']
+                input_size=self.units[-1],  # Actor-Critic의 공통 MLP 마지막 레이어 출력을 입력으로 받음
+                units=estimator_layers,
+                activation=self.activation,
+                dense_func=torch.nn.Linear
             )
+            # 추정 헤드의 최종 출력 레이어 (페이로드 값 1개)
+            self.estimator_output = torch.nn.Linear(estimator_layers[-1], 1)
 
-        def forward(self, input_dict):
-            policy_observation = input_dict['obs']
-            ground_truth_payload = input_dict['ground_truth_payload']
+        def forward(self, obs_dict):
+            is_train = obs_dict.get('is_train', True)
 
-            common_features = self.mlp(policy_observation)
-            value = self.value_act(self.critic_linear(common_features))
-            mu = self.mu_act(self.mu_linear(common_features))
-            estimated_payload = self.estimator_head(common_features)
-            payload_loss = torch.nn.functional.mse_loss(estimated_payload, ground_truth_payload)
+            # 1. 기본 Actor-Critic 순전파 (기존 A2CBuilder.Network 로직과 거의 동일)
+            out = obs_dict['obs']
+            out = self.actor_cnn(out)
+            out = out.flatten(1)
+            common_features = self.actor_mlp(out)
+
+            value = self.value_act(self.value(common_features))
+            mu = self.mu_act(self.mu(common_features))
+
+            if self.fixed_sigma:
+                sigma = self.sigma
+            else:
+                sigma = self.sigma_act(self.sigma(common_features))
+            
+            # 2. 페이로드 추정 로직 추가
+            est_hidden = self.estimator_head(common_features)
+            estimated_payload = self.estimator_output(est_hidden)
+            
+            # 3. 페이로드 손실 계산 (훈련 시에만)
+            payload_loss = torch.tensor(0.0, device=self.device)
+            if is_train:
+                ground_truth_payload = obs_dict['ground_truth_payload']
+                payload_loss = torch.nn.functional.mse_loss(estimated_payload, ground_truth_payload)
+
+            # 4. 에이전트(a2c_continuous.py)가 필요로 하는 모든 값을 딕셔너리 형태로 반환
+            dist = torch.distributions.Normal(mu, sigma)
+            entropy = dist.entropy().sum(dim=-1)
+            prev_actions = obs_dict.get('prev_actions', None)
+            
+            # neglogp는 에이전트가 계산하므로 여기서는 None으로 두어도 괜찮습니다.
+            # 하지만 안전하게 계산해서 전달해 줍니다.
+            neglogp = torch.tensor(0.0)
+            if prev_actions is not None:
+                neglogp = -dist.log_prob(prev_actions).sum(dim=-1)
 
             res_dict = {
                 'mus': mu,
-                'log_std': self.log_std,
+                'sigmas': sigma,
                 'values': value,
-                'payload_loss': payload_loss,
-                'estimates': estimated_payload.detach()
+                'rnn_states': obs_dict.get('rnn_states', None),
+                'prev_neglogp': neglogp,
+                'entropy': entropy,
+                'payload_loss': payload_loss,          # <<< 우리의 커스텀 손실 >>>
+                'estimates': estimated_payload.detach() # <<< 다음 스텝으로 전달될 추정값 >>>
             }
             return res_dict
