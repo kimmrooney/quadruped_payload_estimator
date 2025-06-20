@@ -8,7 +8,13 @@ params:
     name: continuous_a2c_logstd
 
   network:
-    name: actor_critic
+    name: 'estimator_net'
+    builder:
+      name: 'estimator_builder'
+
+    estimator:
+      layers[64]
+  
     separate: False
 
     space:

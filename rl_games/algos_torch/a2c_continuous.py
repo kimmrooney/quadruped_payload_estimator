@@ -111,6 +111,10 @@ class A2CAgent(a2c_common.ContinuousA2CBase):
             mu = res_dict['mus']
             sigma = res_dict['sigmas']
 
+            # for payload
+            # res_dict에서 우리가 정의한 payload_loss를 가져옴
+            payload_loss = res_dict.get('payload_loss', torch.zeros_like(values))
+
             a_loss = self.actor_loss_func(old_action_log_probs_batch, action_log_probs, advantage, self.ppo, curr_e_clip)
 
             if self.has_value_loss:
@@ -123,10 +127,14 @@ class A2CAgent(a2c_common.ContinuousA2CBase):
                 b_loss = self.bound_loss(mu)
             else:
                 b_loss = torch.zeros(1, device=self.ppo_device)
-            losses, sum_mask = torch_ext.apply_masks([a_loss.unsqueeze(1), c_loss , entropy.unsqueeze(1), b_loss.unsqueeze(1)], rnn_masks)
-            a_loss, c_loss, entropy, b_loss = losses[0], losses[1], losses[2], losses[3]
 
-            loss = a_loss + 0.5 * c_loss * self.critic_coef - entropy * self.entropy_coef + b_loss * self.bounds_loss_coef
+            # for payload
+            losses, sum_mask = torch_ext.apply_masks([a_loss.unsqueeze(1), c_loss , entropy.unsqueeze(1), b_loss.unsqueeze(1), payload_loss.unsqueeze(1)], rnn_masks)
+            a_loss, c_loss, entropy, b_loss,  = losses[0], losses[1], losses[2], losses[3], losses[4]
+            
+
+            # for payload, 최종 loss에 estimator_coef 가중치를 적용한 payload_loss를 더함
+            loss = a_loss + 0.5 * c_loss * self.critic_coef - entropy * self.entropy_coef + b_loss * self.bounds_loss_coef + payload_loss * self.estimator_coef
             
             if self.multi_gpu:
                 self.optimizer.zero_grad()
@@ -153,9 +161,10 @@ class A2CAgent(a2c_common.ContinuousA2CBase):
             'masks' : rnn_masks
         }, curr_e_clip, 0)      
 
+        # for payload, 로깅과 반환을 위해 train_result 튜플 맨 끝에 payload_loss를 추가
         self.train_result = (a_loss, c_loss, entropy, \
             kl_dist, self.last_lr, lr_mul, \
-            mu.detach(), sigma.detach(), b_loss)
+            mu.detach(), sigma.detach(), b_loss, payload_loss)
 
     def train_actor_critic(self, input_dict):
         self.calc_gradients(input_dict)

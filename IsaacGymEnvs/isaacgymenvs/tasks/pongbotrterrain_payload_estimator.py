@@ -1735,28 +1735,6 @@ class PongBotRTerrainPayloadEstimator(VecTask):
             self.camera_update()
 
         # payload
-        # 1. 최신 페이로드 추정값 가져오기
-        # rl_games 에이전트는 'obs'를 받아 'actions', 'values', 'rnn_states' 등과 함께
-        # 'payload_estimate' 같은 추가적인 결과도 반환하도록 수정해야 합니다.
-        # 이 값은 actor_critic 네트워크에서 직접 나옵니다.
-        # 여기서는 그 값이 self.actor_critic.get_estimates()를 통해 얻어졌다고 가정합니다.
-        # 실제 구현 시에는 rl_games runner에서 이 값을 받아와야 합니다.
-        
-        # 이 예시에서는, `self.obs_buf`를 다시 네트워크에 넣어 현재 추정치를 얻는다고 가정하겠습니다.
-        # 실제로는 runner의 반환값을 사용해야 중복 계산이 없습니다.
-        current_payload_estimate = self.actor_critic.get_estimates(self.obs_buf) # get_estimates는 새로 만들어야 할 함수입니다. ???
-        
-        # 2. 다음 스텝의 observation을 위해 추정값 업데이트
-        self.estimated_payload[:] = current_payload_estimate
-
-        # 3. 추정 오차(Loss) 계산
-        # self.payloads는 시뮬레이션의 실제 페이로드 값입니다.
-        payload_estimation_error = torch.mean(torch.square(current_payload_estimate - self.payloads))  #????
-
-        # 4. 계산된 오차를 'extras' 버퍼에 저장하여 RL 훈련 알고리즘에 전달
-        self.extras["payload_error"] = payload_estimation_error
-
-        # <<< 추가 >>>
         # 매 스텝마다 'extras' 버퍼에 손실 계산에 필요한 '실제 페이로드' 값을 넣어줍니다.
         # 이 정보는 a2c_common.py에서 읽어갑니다.
         self.extras["ground_truth_payload"] = self.payloads.unsqueeze(-1) # 차원을 맞춰줍니다 (num_envs, 1)
