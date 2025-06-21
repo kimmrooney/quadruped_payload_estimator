@@ -8,13 +8,7 @@ params:
     name: continuous_a2c_logstd
 
   network:
-    name: 'estimator_net'
-    builder:
-      name: 'estimator_builder'
-
-    estimator:
-      layers[64]
-  
+    name: actor_critic
     separate: False
 
     space:
@@ -45,6 +39,13 @@ params:
     #   before_mlp: True
     #   concat_input: True
     #   layer_norm: False
+
+  # for payload
+  estimator_network:
+    name: 'payload_estimator' # 추정기 신경망의 이름
+    mlp:
+      units: [128, 64]       # 추정기 신경망의 구조 (예시)
+      activation: 'relu'     # 추정기는 정책과 다른 활성화 함수를 쓸 수 있습니다.
 
   load_checkpoint: ${if:${...checkpoint},True,False} # flag which sets whether to load the checkpoint
   load_path: ${...checkpoint} # path to the checkpoint to load

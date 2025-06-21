@@ -53,21 +53,21 @@ from isaacgymenvs.tasks.base.vec_task import VecTask
 import torch.nn as nn      # for supervised learning payload
 # pongbotr_payload_estimator.py
 
-class PayloadEstimator(nn.Module):
-    def __init__(self,input_dim, output_dim=1):
-        super(PayloadEstimator, self).__init__()   
-        #입력: 로봇의 관절 시계열 데이터 및 imu 
-        #출력: 페이로드 질량
-        self.estimator = nn.Sequential(
-            nn.Linear(input_dim, 128),
-            nn.ReLU(),
-            nn.Linear(128, 64),
-            nn.ReLU(),
-            nn.Linear(64, output_dim)
-        )
+# class PayloadEstimator(nn.Module):
+#     def __init__(self,input_dim, output_dim=1):
+#         super(PayloadEstimator, self).__init__()   
+#         #입력: 로봇의 관절 시계열 데이터 및 imu 
+#         #출력: 페이로드 질량
+#         self.estimator = nn.Sequential(
+#             nn.Linear(input_dim, 128),
+#             nn.ReLU(),
+#             nn.Linear(128, 64),
+#             nn.ReLU(),
+#             nn.Linear(64, output_dim)
+#         )
 
-    def forward(self, x):
-        return self.estimator(x)
+#     def forward(self, x):
+#         return self.estimator(x)
 
 
 class PongBotRTerrainPayloadEstimator(VecTask):
@@ -263,12 +263,6 @@ class PongBotRTerrainPayloadEstimator(VecTask):
         
         # 이전 속도 방향 각도 저장
         self.prev_velocity_angles = torch.zeros(self.num_envs, device=self.device) 
-
-        # for payload
-        # 이전 스텝의 payload 추정값을 저장하기 위한 버퍼
-        # num_envs: 환경의 갯수, 1: payload 추정값 
-        self.estimated_payload = torch.zeros(self.num_envs, 1, device=self.device, dtype=torch.float)
-
 
         # 리셋 및 카메라 상태
         self.need_reset = False
@@ -748,7 +742,6 @@ class PongBotRTerrainPayloadEstimator(VecTask):
                                     self.actions,                 # 12  [33:45]
                                     self.sin_cycle,               # 4   [45:49]        
                                     self.cos_cycle,               # 4   [49:53]
-                                    self.estimated_payload        # plyload estimator에서 나온 추정값을 obs에 넣어줌, 정책이 사용할 t-1 시점의 추정값??? 왜 시점이 전 스텝이지?
                                     ), dim=-1)                    # 54  
         
         # obs에 노이즈 추가
@@ -1735,13 +1728,10 @@ class PongBotRTerrainPayloadEstimator(VecTask):
             self.camera_update()
 
         # payload
-        # 매 스텝마다 'extras' 버퍼에 손실 계산에 필요한 '실제 페이로드' 값을 넣어줍니다.
-        # 이 정보는 a2c_common.py에서 읽어갑니다.
+        # 매 스텝마다 'extras' 딕셔너리에 '실제 페이로드(정답)' 값을 넣어줍니다.
         self.extras["ground_truth_payload"] = self.payloads.unsqueeze(-1) # 차원을 맞춰줍니다 (num_envs, 1)
 
-    # for payload
-    def update_estimates(self, new_estimates):
-        self.estimated_payload[:] = new_estimates        
+          
 
     # 시뮬레이션 환경에서 카메라 시점을 자동으로 갱신해주는 함수
     def camera_update(self):

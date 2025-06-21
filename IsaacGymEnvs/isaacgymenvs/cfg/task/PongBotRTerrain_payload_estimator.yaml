@@ -5,7 +5,7 @@ physics_engine: 'physx'
 
 env:
   numEnvs: ${resolve_default:4096,${...num_envs}}
-  numObservations: 53   # payload estimation에서 나오는 걸 obs로 넣어야되니깐 추가1 해줘야함 아직 안함
+  numObservations: 53   # obs안의 갯수
   observeSteps: 1       # how many sample data(time step) in history buffer  
   numActions: 12
   numStates: 87

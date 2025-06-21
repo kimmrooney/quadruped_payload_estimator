@@ -397,6 +397,8 @@ class A2CBase(BaseAlgorithm):
     def get_action_values(self, obs):
         processed_obs = self._preproc_obs(obs['obs'])
         self.model.eval()
+        self.estimator_model.eval()    # for payload
+        
         input_dict = {
             'is_train': False,
             'prev_actions': None, 
@@ -740,6 +742,12 @@ class A2CBase(BaseAlgorithm):
                 res_dict = self.get_masked_action_values(self.obs, masks)
             else:
                 res_dict = self.get_action_values(self.obs)
+
+            # for payload
+            new_estimates = res_dict.get('estimates')
+            if new_estimates is not None:
+                self.vec_env.call('update_estimates', new_estimates)
+
             self.experience_buffer.update_data('obses', n, self.obs['obs'])
             self.experience_buffer.update_data('dones', n, self.dones)
 
@@ -759,6 +767,10 @@ class A2CBase(BaseAlgorithm):
                 shaped_rewards += self.gamma * res_dict['values'] * self.cast_obs(infos['time_outs']).unsqueeze(1).float()
 
             self.experience_buffer.update_data('rewards', n, shaped_rewards)
+
+            # for payload
+            if 'ground_truth_payload' in infos['extras']:
+                self.experience_buffer.update_data('ground_truth_payload', n, infos['extras']['ground_truth_payload'])
 
             self.current_rewards += rewards
             self.current_shaped_rewards += shaped_rewards
@@ -1197,15 +1209,17 @@ class ContinuousA2CBase(A2CBase):
         b_losses = []
         entropies = []
         kls = []
+        payload_losses = []
 
         for mini_ep in range(0, self.mini_epochs_num):
             ep_kls = []
             for i in range(len(self.dataset)):
-                a_loss, c_loss, entropy, kl, last_lr, lr_mul, cmu, csigma, b_loss = self.train_actor_critic(self.dataset[i])
+                a_loss, c_loss, entropy, kl, last_lr, lr_mul, cmu, csigma, b_loss, payload_loss = self.train_actor_critic(self.dataset[i])
                 a_losses.append(a_loss)
                 c_losses.append(c_loss)
                 ep_kls.append(kl)
                 entropies.append(entropy)
+                payload_losses.append(payload_loss)
                 if self.bounds_loss_coef is not None:
                     b_losses.append(b_loss)
 
@@ -1236,7 +1250,7 @@ class ContinuousA2CBase(A2CBase):
         update_time = update_time_end - update_time_start
         total_time = update_time_end - play_time_start
 
-        return batch_dict['step_time'], play_time, update_time, total_time, a_losses, c_losses, b_losses, entropies, kls, last_lr, lr_mul
+        return batch_dict['step_time'], play_time, update_time, total_time, a_losses, c_losses, b_losses, entropies, kls, last_lr, lr_mul, payload_losses
 
     def prepare_dataset(self, batch_dict):
         obses = batch_dict['obses']
@@ -1315,7 +1329,7 @@ class ContinuousA2CBase(A2CBase):
 
         while True:
             epoch_num = self.update_epoch()
-            step_time, play_time, update_time, sum_time, a_losses, c_losses, b_losses, entropies, kls, last_lr, lr_mul = self.train_epoch()
+            step_time, play_time, update_time, sum_time, a_losses, c_losses, b_losses, entropies, kls, last_lr, lr_mul, payload_losses = self.train_epoch()
             total_time += sum_time
             frame = self.frame // self.num_agents
 
@@ -1340,6 +1354,10 @@ class ContinuousA2CBase(A2CBase):
 
                 if len(b_losses) > 0:
                     self.writer.add_scalar('losses/bounds_loss', torch_ext.mean_list(b_losses).item(), frame)
+
+                if len(payload_losses) > 0:
+                    self.writer.add_scalar('losses/payload_loss', torch_ext.mean_list(payload_losses).item(), frame)
+
 
                 if self.has_soft_aug:
                     self.writer.add_scalar('losses/aug_loss', np.mean(aug_losses), frame)
