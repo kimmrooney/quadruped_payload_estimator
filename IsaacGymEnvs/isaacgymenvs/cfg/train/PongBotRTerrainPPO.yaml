@@ -43,6 +43,17 @@ params:
   load_checkpoint: ${if:${...checkpoint},True,False} # flag which sets whether to load the checkpoint
   load_path: ${...checkpoint} # path to the checkpoint to load
 
+  estimator_network:
+    name: actor_critic
+    separate: True
+    space: 
+      continuous:
+    
+    mlp:
+      units: [256, 128]
+      activation: elu
+
+
   config:
     name: ${resolve_default:PongBotRerrain,${....experiment}}
     full_experiment_name: ${.name}
@@ -80,6 +91,9 @@ params:
     score_to_win: 20000
     save_frequency: 50
     print_stats: True
+
+    estimator_lr: 0.001
+
 
     # central_value_config:
     #   normalize_input: True

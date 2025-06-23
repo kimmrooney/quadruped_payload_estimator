@@ -157,9 +157,44 @@ class A2CAgent(a2c_common.ContinuousA2CBase):
             kl_dist, self.last_lr, lr_mul, \
             mu.detach(), sigma.detach(), b_loss)
 
+    # def train_actor_critic(self, input_dict):
+    #     self.calc_gradients(input_dict)
+    #     return self.train_result
+
+    # for payload
     def train_actor_critic(self, input_dict):
-        self.calc_gradients(input_dict)
-        return self.train_result
+    # 1. 제어 정책(Policy) 학습 (기존 로직과 거의 동일)
+    # ... (calc_gradients 로직을 여기에 통합 또는 호출) ...
+    # batch_dict['obs'] = input_dict['obs'] # 정책용 관측 사용
+    # ... policy_loss 계산 및 역전파, self.optimizer.step() ...
+
+    # ----- 분리선 -----
+
+    # 2. 가반하중 추정기(Estimator) 학습
+        self.payload_estimator_optimizer.zero_grad() # Estimator 옵티마이저 그래디언트 초기화
+
+        estimator_batch_dict = {
+            'is_train': True,
+            'obs': input_dict['estimator_obs'] # !! 추정기용 관측 사용 !!
+        }
+
+        # Estimator 신경망 순전파
+        with torch.cuda.amp.autocast(enabled=self.mixed_precision):
+            # mus가 추정된 질량 값
+            predicted_mass = self.payload_estimator_model.a2c_network(estimator_batch_dict)['mus']
+            true_mass = input_dict['true_payloads']
+
+            # MSE 손실 계산
+            estimator_loss = torch.nn.functional.mse_loss(predicted_mass, true_mass)
+
+        # Estimator 신경망 역전파 및 업데이트
+        self.scaler.scale(estimator_loss).backward()
+        self.scaler.step(self.payload_estimator_optimizer)
+        self.scaler.update() # 다음 스텝을 위해 스케일러 업데이트
+
+        return self.train_result # 기존 결과 반환 (필요시 estimator_loss도 추가)
+
+
 
     def reg_loss(self, mu):
         if self.bounds_loss_coef is not None:

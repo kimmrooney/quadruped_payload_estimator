@@ -346,6 +346,12 @@ class PongBotRTerrain(VecTask):
                              "orient": torch_zeros(), "torques": torch_zeros(), "joint_acc": torch_zeros(), "base_height": torch_zeros(),
                              "air_time": torch_zeros(), "collision": torch_zeros(), "stumble": torch_zeros(), "action_rate": torch_zeros(), "hip": torch_zeros()}
 
+        # for payload
+        self.history_length = 2 # 예시: 현재와 직전 스텝, 총 2개의 스텝 정보를 사용
+        self.dof_pos_history = torch.zeros(self.num_envs, self.history_length, self.num_dof, device=self.device)
+        self.dof_vel_history = torch.zeros(self.num_envs, self.history_length, self.num_dof, device=self.device)
+        self.actions_history = torch.zeros(self.num_envs, self.history_length, self.num_actions, device=self.device)
+
 
         self.reset_idx(torch.arange(self.num_envs, device=self.device))
         self.init_done = True
@@ -747,6 +753,19 @@ class PongBotRTerrain(VecTask):
         # for i in range(100):
         #     print("self.last_obs_bufs ", i, " : ", self.last_obs_bufs[i][0,:])
         # print("========================================")
+    
+    # for payload
+    def compute_estimator_observations(self):
+    # history 텐서들을 1차원으로 펼쳐서 합친다.
+        obs_est = torch.cat([
+            self.dof_pos_history.view(self.num_envs, -1),
+            self.dof_vel_history.view(self.num_envs, -1),
+            self.actions_history.view(self.num_envs, -1)
+        ], dim=-1)
+        return obs_est
+
+
+
 
     # reward를 위한 함수
     def compute_reward(self):
@@ -1697,6 +1716,16 @@ class PongBotRTerrain(VecTask):
         
         self.last_dof_acc[:] = self.dof_acc[:]
         self.last_cycle_t[:] = self.cycle_t[:]
+
+        # for payload
+        # history 버퍼를 한 칸씩 뒤로 밀고, 현재 값을 마지막에 추가
+        self.dof_pos_history = torch.roll(self.dof_pos_history, shifts=-1, dims=1)
+        self.dof_vel_history = torch.roll(self.dof_vel_history, shifts=-1, dims=1)
+        self.actions_history = torch.roll(self.actions_history, shifts=-1, dims=1)
+        # for payload
+        self.dof_pos_history[:, -1] = self.dof_pos
+        self.dof_vel_history[:, -1] = self.dof_vel
+        self.actions_history[:, -1] = self.actions
 
         # for i in range(len(self.last_proprioceptive_bufs) - 1, 0, -1):
         #     self.last_proprioceptive_bufs[i][:] = self.last_proprioceptive_bufs[i - 1][:]

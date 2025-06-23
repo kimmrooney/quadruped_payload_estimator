@@ -834,6 +834,11 @@ class A2CBase(BaseAlgorithm):
 
             self.experience_buffer.update_data('rewards', n, shaped_rewards)
 
+            # for payload
+            self.experience_buffer.update_data('obses', n, self.obs['policy_obs'])
+            self.experience_buffer.update_data('estimator_obses', n, self.obs['estimator_obs']) # 새로 추가
+            self.experience_buffer.update_data('true_payloads', n, self.payload_mass) # 새로 추가
+
             self.current_rewards += rewards
             self.current_shaped_rewards += shaped_rewards
             self.current_lengths += 1
