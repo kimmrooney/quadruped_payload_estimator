@@ -1,3 +1,130 @@
+# params:
+#   seed: ${...seed}
+
+#   algo:
+#     name: a2c_continuous
+
+#   model:
+#     name: continuous_a2c_logstd
+
+#   network:
+#     name: actor_critic
+#     separate: False
+
+#     space:
+#       continuous:
+#         mu_activation: None
+#         sigma_activation: None
+#         mu_init:
+#           name: default
+#         sigma_init:
+#           name: const_initializer
+#           val: 0. # std = 1.
+#         fixed_sigma: True
+
+#     mlp:
+#       units: [512, 256, 128] 
+#       activation: elu
+#       d2rl: False
+
+#       initializer:
+#         name: default
+#       regularizer:
+#         name: None
+
+#     # rnn:
+#     #   name: lstm
+#     #   units: 128
+#     #   layers: 1
+#     #   before_mlp: True
+#     #   concat_input: True
+#     #   layer_norm: False
+
+#   # for payload
+  
+
+#   load_checkpoint: ${if:${...checkpoint},True,False} # flag which sets whether to load the checkpoint
+#   load_path: ${...checkpoint} # path to the checkpoint to load
+
+#   config:
+#     name: ${resolve_default:PongBotRerrain,${....experiment}}
+#     full_experiment_name: ${.name}
+#     env_name: rlgpu
+#     ppo: True
+#     multi_gpu: ${....multi_gpu}
+#     mixed_precision: True
+#     normalize_input: True
+#     normalize_value: True
+#     normalize_advantage: True
+#     value_bootstrap: True
+#     clip_actions: False
+#     num_actors: ${....task.env.numEnvs}
+#     reward_shaper:
+#       scale_value: 1.0
+#     gamma: 0.99
+#     tau: 0.95
+#     e_clip: 0.2
+#     entropy_coef: 0.001
+#     learning_rate: 3.e-4 # overwritten by adaptive lr_schedule
+#     lr_schedule: adaptive
+#     kl_threshold: 0.008 # target kl for adaptive lr
+#     truncate_grads: True
+#     grad_norm: 1.
+#     horizon_length: 24
+#     minibatch_size: 16384 # 16384 // batch : 환경수 * horizon_length
+#     mini_epochs: 5
+#     critic_coef: 2
+#     clip_value: True
+#     seq_len: 4 # only for rnn
+#     bounds_loss_coef: 0.
+#     estimator_coef: 1.0   # payload , 페이로드 추정 손실의 중요도를 조절하는 가중치, 1.0은 어떤 의미?
+
+#     max_epochs: ${resolve_default:50000,${....max_iterations}}
+#     save_best_after: 100
+#     score_to_win: 20000
+#     save_frequency: 50
+#     print_stats: True
+
+#     estimator_network:
+#     name: 'payload_estimator' # 추정기 신경망의 이름
+#     mlp:
+#       units: [128, 64]
+#       activation: 'relu'
+#       initializer:
+#         name: 'default'
+#       regularizer:
+#         name: 'None'
+
+#     # central_value_config:
+#     #   normalize_input: True
+#     #   learning_rate: 3e-4
+#     #   lr_schedule: adaptive
+#     #   minibatch_size: 8192 #16384 #8192
+#     #   mini_epochs: 5
+#     #   clip_value: True
+#     #   grad_norm: 1.0
+#     #   truncate_grads: True
+#     #   model:
+#     #     name: central_value
+#     #   network:
+#     #     name: actor_critic
+#     #     central_value: True
+#     #     mlp:
+#     #       units: [512, 256, 128]
+#     #       activation: elu
+#     #       d2rl: False
+
+#     #       initializer:
+#     #         name: default
+#     #       regularizer:
+#     #         name: None
+
+  
+# ==============================================================================
+# IsaacGymEnvs/isaacgymenvs/cfg/train/PongBotRTerrainPayloadEstimatorPPO.yaml 파일 전체 내용
+
+# PongBotRTerrainPayloadEstimatorPPO.yaml 파일의 params 섹션을 아래 내용으로 교체
+
 params:
   seed: ${...seed}
 
@@ -7,10 +134,10 @@ params:
   model:
     name: continuous_a2c_logstd
 
+  # "정책 신경망"을 위한 설정입니다.
   network:
     name: actor_critic
     separate: False
-
     space:
       continuous:
         mu_activation: None
@@ -19,39 +146,22 @@ params:
           name: default
         sigma_init:
           name: const_initializer
-          val: 0. # std = 1.
+          val: 0.
         fixed_sigma: True
-
     mlp:
-      units: [512, 256, 128] 
+      units: [512, 256, 128]
       activation: elu
       d2rl: False
-
       initializer:
         name: default
       regularizer:
         name: None
 
-    # rnn:
-    #   name: lstm
-    #   units: 128
-    #   layers: 1
-    #   before_mlp: True
-    #   concat_input: True
-    #   layer_norm: False
-
-  # for payload
-  estimator_network:
-    name: 'payload_estimator' # 추정기 신경망의 이름
-    mlp:
-      units: [128, 64]       # 추정기 신경망의 구조 (예시)
-      activation: 'relu'     # 추정기는 정책과 다른 활성화 함수를 쓸 수 있습니다.
-
-  load_checkpoint: ${if:${...checkpoint},True,False} # flag which sets whether to load the checkpoint
-  load_path: ${...checkpoint} # path to the checkpoint to load
+  load_checkpoint: ${if:${...checkpoint},True,False}
+  load_path: ${...checkpoint}
 
   config:
-    name: ${resolve_default:PongBotRerrain,${....experiment}}
+    name: ${resolve_default:PongBotRTerrain,${....experiment}}
     full_experiment_name: ${.name}
     env_name: rlgpu
     ppo: True
@@ -69,48 +179,31 @@ params:
     tau: 0.95
     e_clip: 0.2
     entropy_coef: 0.001
-    learning_rate: 3.e-4 # overwritten by adaptive lr_schedule
+    learning_rate: 3.e-4
     lr_schedule: adaptive
-    kl_threshold: 0.008 # target kl for adaptive lr
+    kl_threshold: 0.008
     truncate_grads: True
     grad_norm: 1.
     horizon_length: 24
-    minibatch_size: 16384 # 16384 // batch : 환경수 * horizon_length
+    minibatch_size: 16384
     mini_epochs: 5
     critic_coef: 2
     clip_value: True
-    seq_len: 4 # only for rnn
-    bounds_loss_coef: 0.
-    estimator_coef: 1.0   # payload , 페이로드 추정 손실의 중요도를 조절하는 가중치, 1.0은 어떤 의미?
+    seq_len: 4
+    bounds_loss_coef: 0.0
+    estimator_coef: 1.0
+
+    # <<< "추정기 신경망"을 위한 섹션을 이곳, config 블록 안으로 옮깁니다. >>>
+    estimator_network:
+      name: 'payload_estimator'
+      mlp:
+        units: [128, 64]
+        activation: 'relu'
+        initializer:
+          name: 'default'
 
     max_epochs: ${resolve_default:50000,${....max_iterations}}
     save_best_after: 100
     score_to_win: 20000
     save_frequency: 50
     print_stats: True
-
-    # central_value_config:
-    #   normalize_input: True
-    #   learning_rate: 3e-4
-    #   lr_schedule: adaptive
-    #   minibatch_size: 8192 #16384 #8192
-    #   mini_epochs: 5
-    #   clip_value: True
-    #   grad_norm: 1.0
-    #   truncate_grads: True
-    #   model:
-    #     name: central_value
-    #   network:
-    #     name: actor_critic
-    #     central_value: True
-    #     mlp:
-    #       units: [512, 256, 128]
-    #       activation: elu
-    #       d2rl: False
-
-    #       initializer:
-    #         name: default
-    #       regularizer:
-    #         name: None
-
-  

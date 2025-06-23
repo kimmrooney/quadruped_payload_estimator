@@ -15,6 +15,8 @@ from rl_games.algos_torch.network_builder import PayloadEstimator   # for payloa
 class A2CAgent(a2c_common.ContinuousA2CBase):
 
     def __init__(self, base_name, params):
+        print("--- a2c_continuous.py: 받은 params의 모든 키 ---")
+        print(params.keys())
         a2c_common.ContinuousA2CBase.__init__(self, base_name, params)
         obs_shape = self.obs_shape
         build_config = {
@@ -31,12 +33,9 @@ class A2CAgent(a2c_common.ContinuousA2CBase):
         policy_obs_shape = (self.obs_shape[0] + 1,)
 
         policy_build_config = {
-            'actions_num': self.actions_num,
-            'input_shape': policy_obs_shape,
-            'num_seqs': self.num_actors * self.num_agents,
-            'value_size': self.env_info.get('value_size', 1),
-            'normalize_value': self.normalize_value,
-            'normalize_input': self.normalize_input,
+            'actions_num' : self.actions_num, 'input_shape' : policy_obs_shape,
+            'num_seqs' : self.num_actors * self.num_agents, 'value_size': self.env_info.get('value_size',1),
+            'normalize_value' : self.normalize_value, 'normalize_input': self.normalize_input,
         }
         
         self.model = self.network.build(build_config)
@@ -46,12 +45,12 @@ class A2CAgent(a2c_common.ContinuousA2CBase):
         # <<< 2. 페이로드 추정 신경망(self.estimator_model) 생성 >>>
         # network_builder에 새로 추가한 PayloadEstimator를 사용합니다.
         # YAML 파일에서 'estimator_network' 설정을 가져옵니다.
-        estimator_params = self.params['estimator_network']
+        estimator_params = self.config['estimator_network']
         estimator_build_config = {
             'input_shape': self.obs_shape,
         }
 
-        self.estimator_model = PayloadEstimator(estimator_params, **estimator_build_config)
+        self.estimator_model = PayloadEstimator(input_size=self.obs_shape[0], units=[128, 64])
         self.estimator_model.to(self.ppo_device)
 
         self.states = None
@@ -286,4 +285,23 @@ class A2CAgent(a2c_common.ContinuousA2CBase):
             b_loss = 0
         return b_loss
 
+# for payload
+# <<< 1. 추정기 신경망 클래스를 이 파일 안에 직접 정의합니다. >>>
+class PayloadEstimator(nn.Module):
+    def __init__(self, input_size, units=[128, 64], activation='relu'):
+        super().__init__()
+        
+        activation_func = nn.ReLU if activation == 'relu' else nn.ELU
+        
+        layers = []
+        in_size = input_size
+        for unit in units:
+            layers.append(nn.Linear(in_size, unit))
+            layers.append(activation_func())
+            in_size = unit
+            
+        self.mlp = nn.Sequential(*layers)
+        self.output_layer = nn.Linear(in_size, 1)
 
+    def forward(self, x):
+        return self.output_layer(self.mlp(x))
