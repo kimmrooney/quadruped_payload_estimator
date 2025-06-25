@@ -51,6 +51,14 @@ def preprocess_train_config(cfg, config_dict):
 
     train_cfg['full_experiment_name'] = cfg.get('full_experiment_name')
 
+    # 태스크(환경)의 전체 설정을 알고리즘 설정에 포함시켜 전달합니다.
+    # 이렇게 하면 a2c_common.py에서 이 값을 참조할 수 있습니다.
+    # for payload
+    train_cfg['env_config_full'] = OmegaConf.to_container(cfg.task, resolve=True)
+
+
+
+
     print(f'Using rl_device: {cfg.rl_device}')
     print(f'Using sim_device: {cfg.sim_device}')
     print(train_cfg)

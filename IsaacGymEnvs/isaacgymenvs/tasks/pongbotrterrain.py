@@ -233,7 +233,12 @@ class PongBotRTerrain(VecTask):
 
         # 토크/액션 관련 텐서  ??action2가 있지? 과거 시점의 액션
         self.torques = torch.zeros(self.num_envs, self.num_actions, dtype=torch.float, device=self.device, requires_grad=False)
-       
+
+        # for payload
+        self.payload_mass = torch.zeros(self.num_envs, 1, device=self.device)
+        # Payload Estimator가 추정한 값을 저장할 텐서 (정책의 입력으로 사용)
+        self.estimated_payload_mass = torch.zeros(self.num_envs, 1, device=self.device)
+
         self.actions = torch.zeros(self.num_envs, self.num_actions, dtype=torch.float, device=self.device, requires_grad=False)
         self.last_actions = torch.zeros(self.num_envs, self.num_actions, dtype=torch.float, device=self.device, requires_grad=False)
         self.last_actions2 = torch.zeros(self.num_envs, self.num_actions, dtype=torch.float, device=self.device, requires_grad=False)
@@ -390,7 +395,7 @@ class PongBotRTerrain(VecTask):
         noise_vec[6:9] = 0.
         noise_vec[9:21] = self.cfg["env"]["learn"]["dofPositionNoise"] * noise_level * self.obs_scales["dofPositionScale"]
         noise_vec[21:33] = self.cfg["env"]["learn"]["dofVelocityNoise"] * noise_level * self.obs_scales["dofVelocityScale"]
-        noise_vec[33:53] = 0.
+        noise_vec[33:54] = 0.
         return noise_vec
 
     # 시뮬레이션 환경에 평평한 지형 생성함수
@@ -729,6 +734,7 @@ class PongBotRTerrain(VecTask):
                                     self.actions,                 # 12  [33:45]
                                     self.sin_cycle,               # 4   [45:49]        
                                     self.cos_cycle,               # 4   [49:53]
+                                    self.estimated_payload_mass # 1 -> 새로 추가
                                     ), dim=-1)                    # 54  
         
         # obs에 노이즈 추가
@@ -1699,7 +1705,11 @@ class PongBotRTerrain(VecTask):
         if len(env_ids) > 0:
             self.reset_idx(env_ids)
         self.compute_observations()
-        
+
+        # for payload
+        estimator_obs = self.compute_estimator_observations() 
+        self.extras["estimator_obs"] = estimator_obs
+        self.extras["true_payload"] = self.payload_mass
         # print("================================================")
         # print("progress_buf : ", self.progress_buf[self.observe_envs])
         # print("obs_t : ", self.obs_buf_t[self.observe_envs])
@@ -2250,6 +2260,14 @@ class PongBotRTerrain(VecTask):
         rotation_quaternion[~non_zero_axis] = torch.tensor([0, 0, 0, 1.0], device=normal_vector.device) # 회전 없음
 
         return rotation_quaternion
+    
+    def compute_estimator_observations(self):
+        obs_est = torch.cat([
+            self.dof_pos_history.view(self.num_envs, -1),
+            self.dof_vel_history.view(self.num_envs, -1),
+            self.actions_history.view(self.num_envs, -1)
+        ], dim=-1)
+        return obs_est
 
 
 

@@ -30,6 +30,24 @@ class A2CAgent(a2c_common.ContinuousA2CBase):
         self.last_lr = float(self.last_lr)
         self.bound_loss_type = self.config.get('bound_loss_type', 'bound') # 'regularisation' or 'bound'
         self.optimizer = optim.Adam(self.model.parameters(), float(self.last_lr), eps=1e-08, weight_decay=self.weight_decay)
+        
+        # for payload
+        estimator_obs_size = self.config['env_config_full']['env']['numEstimatorObservations']
+        estimator_config = {
+        'actions_num': 1, 
+        # 정책의 obs_shape 대신, 추정기의 obs 크기인 estimator_obs_size를 직접 지정합니다.
+        'input_shape': (estimator_obs_size,),  # 기존: self.obs_shape -> 수정
+        'num_seqs': self.num_actors * self.num_agents,
+        'normalize_value': False,
+        'normalize_input': self.normalize_input,
+        }
+        # PongBotRTerrainPPO.yaml에 estimator_network를 정의하고 불러오는 것이 가장 이상적이지만,
+        # 우선은 정책 네트워크와 동일한 빌더를 사용해 임시로 생성합니다.
+        self.payload_estimator_model = self.network.build(estimator_config)
+        self.payload_estimator_model.to(self.ppo_device)
+        estimator_lr = self.config.get('estimator_lr', 1e-4) 
+        self.payload_estimator_optimizer = optim.Adam(self.payload_estimator_model.parameters(), float(estimator_lr))
+    
 
         if self.has_central_value:
             cv_config = {
@@ -163,36 +181,43 @@ class A2CAgent(a2c_common.ContinuousA2CBase):
 
     # for payload
     def train_actor_critic(self, input_dict):
-    # 1. 제어 정책(Policy) 학습 (기존 로직과 거의 동일)
-    # ... (calc_gradients 로직을 여기에 통합 또는 호출) ...
-    # batch_dict['obs'] = input_dict['obs'] # 정책용 관측 사용
-    # ... policy_loss 계산 및 역전파, self.optimizer.step() ...
-
-    # ----- 분리선 -----
-
-    # 2. 가반하중 추정기(Estimator) 학습
-        self.payload_estimator_optimizer.zero_grad() # Estimator 옵티마이저 그래디언트 초기화
+    # ==================== 1. 정책(Policy) 학습 ====================
+    # 먼저, 기존의 calc_gradients 함수를 호출하여 정책 신경망을 학습시킵니다.
+    # ★★★ 이 부분이 누락되어 'train_result'가 생성되지 않았습니다. ★★★
+        self.calc_gradients(input_dict)
+        
+        # ==================== 2. 가반하중 추정기(Estimator) 학습 ====================
+        # 다음으로, 추정기 신경망을 별도로 학습시킵니다.
+        self.payload_estimator_optimizer.zero_grad()
 
         estimator_batch_dict = {
             'is_train': True,
-            'obs': input_dict['estimator_obs'] # !! 추정기용 관측 사용 !!
+            'obs': self._preproc_obs(input_dict['estimator_obs'])
         }
-
-        # Estimator 신경망 순전파
+        
         with torch.cuda.amp.autocast(enabled=self.mixed_precision):
-            # mus가 추정된 질량 값
-            predicted_mass = self.payload_estimator_model.a2c_network(estimator_batch_dict)['mus']
+            # 내부 신경망(.a2c_network)을 직접 호출하고, tuple의 첫 번째 원소를 가져옵니다.
+            estimator_result_tuple = self.payload_estimator_model.a2c_network(estimator_batch_dict)
+            predicted_mass = estimator_result_tuple[0]
+            
             true_mass = input_dict['true_payloads']
-
+            
             # MSE 손실 계산
             estimator_loss = torch.nn.functional.mse_loss(predicted_mass, true_mass)
 
         # Estimator 신경망 역전파 및 업데이트
         self.scaler.scale(estimator_loss).backward()
         self.scaler.step(self.payload_estimator_optimizer)
-        self.scaler.update() # 다음 스텝을 위해 스케일러 업데이트
-
-        return self.train_result # 기존 결과 반환 (필요시 estimator_loss도 추가)
+        
+        # 참고: self.scaler.update()는 calc_gradients 내부의 trancate_gradients_and_step에서
+        # 이미 호출되므로, 여기서 또 호출하면 안됩니다.
+        
+        # Tensorboard에 추정기 손실(estimator_loss) 기록
+        if self.writer is not None:
+            self.writer.add_scalar('losses/estimator_loss', estimator_loss.item(), self.frame)
+        
+        # calc_gradients에서 저장한 정책 학습 결과를 최종적으로 반환합니다.
+        return self.train_result
 
 
 

@@ -92,7 +92,7 @@ params:
     save_frequency: 50
     print_stats: True
 
-    estimator_lr: 0.001
+    estimator_lr: 1e-4 
 
 
     # central_value_config:

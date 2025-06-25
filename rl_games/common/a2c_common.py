@@ -458,6 +458,21 @@ class A2CBase(BaseAlgorithm):
         }
         self.experience_buffer = ExperienceBuffer(self.env_info, algo_info, self.ppo_device)
 
+        # 이제 self.config['env_config_full'] 에서 환경 설정을 안전하게 가져올 수 있습니다.
+        if 'env_config_full' in self.config and 'env' in self.config['env_config_full']:
+            env_config = self.config['env_config_full']['env']
+            if 'numEstimatorObservations' in env_config:
+                estimator_obs_shape = (env_config['numEstimatorObservations'],)
+                self.experience_buffer.tensor_dict['estimator_obses'] = torch.zeros((self.horizon_length, self.num_actors) + estimator_obs_shape,dtype=torch.float32, device=self.ppo_device)
+                                                                                
+        
+        # 실제 페이로드('true_payloads')를 저장할 공간 생성
+        payload_shape = (1,)
+        self.experience_buffer.tensor_dict['true_payloads'] = torch.zeros((self.horizon_length, self.num_actors) + payload_shape, dtype=torch.float32, device=self.ppo_device)
+
+                                                                    
+
+
         val_shape = (self.horizon_length, batch_size, self.value_size)
         current_rewards_shape = (batch_size, self.value_size)
         self.current_rewards = torch.zeros(current_rewards_shape, dtype=torch.float32, device=self.ppo_device)
@@ -729,43 +744,55 @@ class A2CBase(BaseAlgorithm):
                 obs_batch = obs_batch.float() / 255.0
         return obs_batch
 
+    # a2c_common.py 파일의 play_steps 메서드를 아래의 전체 코드로 교체해주세요.
     def play_steps(self):
         update_list = self.update_list
-
         step_time = 0.0
 
         for n in range(self.horizon_length):
+            # 1. 현재 관측(obs)으로 행동(action)을 결정합니다.
             if self.use_action_masks:
                 masks = self.vec_env.get_action_masks()
                 res_dict = self.get_masked_action_values(self.obs, masks)
             else:
                 res_dict = self.get_action_values(self.obs)
+
+            # 2. 경험 버퍼에 현재 상태와 모델의 예측값들을 저장합니다.
             self.experience_buffer.update_data('obses', n, self.obs['obs'])
             self.experience_buffer.update_data('dones', n, self.dones)
-
+            
             for k in update_list:
                 self.experience_buffer.update_data(k, n, res_dict[k]) 
             if self.has_central_value:
                 self.experience_buffer.update_data('states', n, self.obs['states'])
 
+            # 3. 결정된 행동으로 환경을 한 스텝 진행시킵니다. (여기서 infos가 생성됩니다)
             step_time_start = time.time()
             self.obs, rewards, self.dones, infos = self.env_step(res_dict['actions'])
             step_time_end = time.time()
-
             step_time += (step_time_end - step_time_start)
 
+            # 4. 'infos'를 받은 후에 추가 정보를 버퍼에 저장합니다.
+            #    (루프 윗부분에 있던 중복 코드는 삭제했습니다.)
+            if 'estimator_obs' in infos:
+                self.experience_buffer.update_data('estimator_obses', n, infos['estimator_obs'])
+            if 'true_payload' in infos:
+                self.experience_buffer.update_data('true_payloads', n, infos['true_payload'])
+
+            # 5. 보상을 처리합니다.
             shaped_rewards = self.rewards_shaper(rewards)
             if self.value_bootstrap and 'time_outs' in infos:
                 shaped_rewards += self.gamma * res_dict['values'] * self.cast_obs(infos['time_outs']).unsqueeze(1).float()
 
             self.experience_buffer.update_data('rewards', n, shaped_rewards)
 
+            # 6. 통계를 업데이트합니다. (이하 동일)
             self.current_rewards += rewards
             self.current_shaped_rewards += shaped_rewards
             self.current_lengths += 1
             all_done_indices = self.dones.nonzero(as_tuple=False)
             env_done_indices = all_done_indices[::self.num_agents]
-     
+    
             self.game_rewards.update(self.current_rewards[env_done_indices])
             self.game_shaped_rewards.update(self.current_shaped_rewards[env_done_indices])
             self.game_lengths.update(self.current_lengths[env_done_indices])
@@ -777,6 +804,7 @@ class A2CBase(BaseAlgorithm):
             self.current_shaped_rewards = self.current_shaped_rewards * not_dones.unsqueeze(1)
             self.current_lengths = self.current_lengths * not_dones
 
+        # 이하 함수의 나머지 부분은 기존과 동일합니다.
         last_values = self.get_values(self.obs)
 
         fdones = self.dones.float()
@@ -910,7 +938,7 @@ class DiscreteA2CBase(A2CBase):
         self.update_list = ['actions', 'neglogpacs', 'values']
         if self.use_action_masks:
             self.update_list += ['action_masks']
-        self.tensor_list = self.update_list + ['obses', 'states', 'dones']
+        self.tensor_list = self.update_list + ['obses', 'states', 'dones', 'estimator_obses', 'true_payloads']
 
     def train_epoch(self):
         super().train_epoch()
@@ -1011,6 +1039,10 @@ class DiscreteA2CBase(A2CBase):
         dataset_dict['dones'] = dones
         dataset_dict['rnn_states'] = rnn_states
         dataset_dict['rnn_masks'] = rnn_masks
+
+        # for payload
+        dataset_dict['estimator_obs'] = batch_dict['estimator_obses']
+        dataset_dict['true_payloads'] = batch_dict['true_payloads']
 
         if self.use_action_masks:
             dataset_dict['action_masks'] = batch_dict['action_masks']
@@ -1173,7 +1205,8 @@ class ContinuousA2CBase(A2CBase):
     def init_tensors(self):
         A2CBase.init_tensors(self)
         self.update_list = ['actions', 'neglogpacs', 'values', 'mus', 'sigmas']
-        self.tensor_list = self.update_list + ['obses', 'states', 'dones']
+        self.tensor_list = self.update_list + ['obses', 'states', 'dones', 'estimator_obses', 'true_payloads']
+
 
     def train_epoch(self):
         super().train_epoch()
@@ -1289,6 +1322,11 @@ class ContinuousA2CBase(A2CBase):
         dataset_dict['rnn_masks'] = rnn_masks
         dataset_dict['mu'] = mus
         dataset_dict['sigma'] = sigmas
+
+        # 수집된 'estimator_obses'와 'true_payloads'를 학습용 데이터셋에 추가합니다.
+        # 이 코드가 누락되어 KeyError가 발생했습니다.
+        dataset_dict['estimator_obs'] = batch_dict['estimator_obses']
+        dataset_dict['true_payloads'] = batch_dict['true_payloads']
 
         self.dataset.update_values_dict(dataset_dict)
 

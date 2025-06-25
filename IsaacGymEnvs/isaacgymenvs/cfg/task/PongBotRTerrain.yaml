@@ -6,7 +6,7 @@ physics_engine: 'physx'
 env:
   numEnvs: ${resolve_default:4096,${...num_envs}}
   numObservations: 54   # 53 + 1(payload mass)
-  numEstimatorObservations: 60 # 예시: (dof_pos, dof_vel, actions) x 2개 스텝 = (12+12+12)*2 = 72 (필요에 따라 정의) , for payload
+  numEstimatorObservations: 72 # 예시: (dof_pos, dof_vel, actions) x 2개 스텝 = (12+12+12)*2 = 72 (필요에 따라 정의) , for payload
   observeSteps: 1       # how many sample data(time step) in history buffer  
   numActions: 12
   numStates: 87
