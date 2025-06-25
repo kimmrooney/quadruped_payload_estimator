@@ -103,7 +103,7 @@
     <limit
       lower="-0.349066"
       upper="0.349066"
-      effort="200"
+      effort="80"
       velocity="13" />      
       <!-- effor = 27A 기준으로 해둠 -->
   </joint>
@@ -176,7 +176,7 @@
     <limit
       lower="-0.366519"
       upper="1.5708"
-      effort="200"
+      effort="80"
       velocity="13" />
   </joint>
   <link
@@ -235,7 +235,7 @@
     <limit
       lower="-2.58309"
       upper="-0.488692"
-      effort="200"
+      effort="80"
       velocity="13" />
   </joint>
   <link
@@ -350,7 +350,7 @@
     <limit
       lower="-0.349066"
       upper="0.349066"
-      effort="200"
+      effort="80"
       velocity="13" />
   </joint>
   <link
@@ -422,7 +422,7 @@
     <limit
       lower="-0.366519"
       upper="1.5708"
-      effort="200"
+      effort="80"
       velocity="13" />
   </joint>
   <link
@@ -481,7 +481,7 @@
     <limit
       lower="-2.58309"
       upper="-0.488692"
-      effort="200"
+      effort="80"
       velocity="13" />
   </joint>
   <link
@@ -596,7 +596,7 @@
     <limit
       lower="-0.349066"
       upper="0.349066"
-      effort="200"
+      effort="80"
       velocity="13" />
   </joint>
   <link
@@ -669,7 +669,7 @@
     <limit
       lower="-0.366519"
       upper="1.5708"
-      effort="200"
+      effort="80"
       velocity="13" />
   </joint>
   <link
@@ -728,7 +728,7 @@
     <limit
       lower="-2.58309"
       upper="-0.488692"
-      effort="200"
+      effort="80"
       velocity="13" />
   </joint>
   <link
@@ -843,7 +843,7 @@
     <limit
       lower="-0.349066"
       upper="0.349066"
-      effort="200"
+      effort="80"
       velocity="13" />
   </joint>
   <link
@@ -913,7 +913,7 @@
     <limit
       lower="-0.366519"
       upper="1.5708"
-      effort="200"
+      effort="80"
       velocity="13" />
   </joint>
   <link
@@ -972,7 +972,7 @@
     <limit
       lower="-2.58309"
       upper="-0.488692"
-      effort="200"
+      effort="80"
       velocity="13" />
   </joint>
   <link
