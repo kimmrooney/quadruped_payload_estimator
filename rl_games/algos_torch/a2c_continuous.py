@@ -7,7 +7,7 @@ from rl_games.common import datasets
 
 from torch import optim
 import torch 
-
+from rl_games.algos_torch import model_builder
 
 class A2CAgent(a2c_common.ContinuousA2CBase):
 

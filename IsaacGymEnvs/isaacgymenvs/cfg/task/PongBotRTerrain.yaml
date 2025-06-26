@@ -116,8 +116,8 @@ env:
       # # Task Rewards (Pos) 
       # rew_lin_vel_x               : 1.5
       # rew_lin_vel_y               : 1.5
-      rew_ang_vel_z               : 1.
-      rew_lin_vel_xy              : 1.5
+      rew_ang_vel_z               : 2.
+      rew_lin_vel_xy              : 2.5
 
       # reward_vel_following          : 1.5
       # reward_target_distance        : 1.5
@@ -214,8 +214,8 @@ sim:
     contact_collection: 1 # 0: CC_NEVER (don't collect contact info), 1: CC_LAST_SUBSTEP (collect only contacts on last substep), 2: CC_ALL_SUBSTEPS (broken - do not use!)
   # foundLostAggregatePairsCapacity: 10049151  # 이 줄을 추가
 task:
-  randomize: False
-  # randomize: True      
+  # randomize: False
+  randomize: True      
   randomization_params:
     frequency: 500   # Define how many environment steps between generating new randomizations
     observations:

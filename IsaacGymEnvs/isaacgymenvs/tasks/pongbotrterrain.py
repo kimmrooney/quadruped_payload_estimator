@@ -1157,7 +1157,7 @@ class PongBotRTerrain(VecTask):
 
         # total reward
         self.rew_buf = total_rew
-        self.rew_buf = torch.clip(self.rew_buf, min=0., max=None)
+        self.rew_buf = torch.clip(self.rew_buf, min=-1., max=None)
 
     def plot_juggler(self):
         
@@ -1598,7 +1598,7 @@ class PongBotRTerrain(VecTask):
             # torques = torch.clip(self.Kp*(targets - self.dof_pos) - self.Kd*self.dof_vel,-17.,17.)
             noise_kp = random.uniform(0.95, 1.05)
             noise_kd = random.uniform(0.95, 1.05)
-            torques = torch.clip((self.Kp * noise_kp) * (targets - self.dof_pos) - (self.Kd * noise_kd) * self.dof_vel, -200., 200.)
+            torques = torch.clip((self.Kp * noise_kp) * (targets - self.dof_pos) - (self.Kd * noise_kd) * self.dof_vel, -80., 80.)
             # print("==========================")
             # print("targets : ", targets)
             # print("dof_pos : ", self.dof_pos)
