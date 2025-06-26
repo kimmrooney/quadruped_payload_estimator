@@ -56,9 +56,6 @@ def preprocess_train_config(cfg, config_dict):
     # for payload
     train_cfg['env_config_full'] = OmegaConf.to_container(cfg.task, resolve=True)
 
-
-
-
     print(f'Using rl_device: {cfg.rl_device}')
     print(f'Using sim_device: {cfg.sim_device}')
     print(train_cfg)

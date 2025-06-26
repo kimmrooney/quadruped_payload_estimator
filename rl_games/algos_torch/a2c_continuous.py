@@ -31,6 +31,24 @@ class A2CAgent(a2c_common.ContinuousA2CBase):
         self.bound_loss_type = self.config.get('bound_loss_type', 'bound') # 'regularisation' or 'bound'
         self.optimizer = optim.Adam(self.model.parameters(), float(self.last_lr), eps=1e-08, weight_decay=self.weight_decay)
         
+        #
+        # ▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼
+        # 수정된 부분: Estimator Optimizer 설정
+        # 이제 self.model.estimator 로 접근하여 옵티마이저를 설정합니다.
+        # ▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼
+        #
+        if hasattr(self.model, 'estimator') and self.model.estimator is not None:
+            print("Initializing estimator optimizer...")
+            estimator_lr = self.config.get('estimator_lr', 1e-4)
+            self.payload_estimator_optimizer = optim.Adam(self.model.estimator.parameters(), float(estimator_lr))
+        else:
+            self.payload_estimator_optimizer = None
+            print("Warning: Estimator network not found in the model.")
+        #
+        # ▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲
+        #
+
+
         # for payload
         estimator_obs_size = self.config['env_config_full']['env']['numEstimatorObservations']
         estimator_config = {
@@ -45,8 +63,8 @@ class A2CAgent(a2c_common.ContinuousA2CBase):
         # 우선은 정책 네트워크와 동일한 빌더를 사용해 임시로 생성합니다.
         self.payload_estimator_model = self.network.build(estimator_config)
         self.payload_estimator_model.to(self.ppo_device)
-        estimator_lr = self.config.get('estimator_lr', 1e-4) 
-        self.payload_estimator_optimizer = optim.Adam(self.payload_estimator_model.parameters(), float(estimator_lr))
+        # estimator_lr = self.config.get('estimator_lr', 1e-4) 
+        # self.payload_estimator_optimizer = optim.Adam(self.payload_estimator_model.parameters(), float(estimator_lr))
     
 
         if self.has_central_value:

@@ -10,7 +10,7 @@ def register_network(name, target_class):
     NETWORK_REGISTRY[name] = lambda **kwargs: target_class()
 
 def register_model(name, target_class):
-    MODEL_REGISTRY[name] = lambda  network, **kwargs: target_class(network)
+    MODEL_REGISTRY[name] = lambda network, **kwargs: target_class(network, **kwargs)
 
 
 class NetworkBuilder:
@@ -41,7 +41,7 @@ class ModelBuilder:
         self.model_factory.register_builder('continuous_a2c',
                                             lambda network, **kwargs: models.ModelA2CContinuous(network))
         self.model_factory.register_builder('continuous_a2c_logstd',
-                                            lambda network, **kwargs: models.ModelA2CContinuousLogStd(network))
+                                            lambda network, **kwargs: models.ModelA2CContinuousLogStd(network, **kwargs))
         self.model_factory.register_builder('soft_actor_critic',
                                             lambda network, **kwargs: models.ModelSACContinuous(network))
         self.model_factory.register_builder('central_value',
@@ -53,6 +53,28 @@ class ModelBuilder:
 
     def load(self, params):
         model_name = params['model']['name']
+        
+        # 기본 policy 네트워크를 생성합니다.
         network = self.network_builder.load(params['network'])
-        model = self.model_factory.create(model_name, network=network)
+        
+        # 모델 생성에 필요한 인자들을 담을 딕셔너리
+        model_args = {
+            'network': network
+        }
+
+        #
+        # ▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼
+        # 수정된 부분: 'estimator_network' 설정이 있는지 확인하고, 있다면 생성합니다.
+        # ▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼
+        #
+        if 'estimator_network' in params:
+            print('Loading estimator network...')
+            estimator_network_builder = self.network_builder.load(params['estimator_network'])
+            model_args['estimator_network'] = estimator_network_builder
+        #
+        # ▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲
+        #
+
+        # 생성된 네트워크(들)을 모델에 전달합니다.
+        model = self.model_factory.create(model_name, **model_args)
         return model

@@ -618,6 +618,16 @@ class A2CBase(BaseAlgorithm):
         state['frame'] = self.frame
         state['optimizer'] = self.optimizer.state_dict()
 
+        # ▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼
+        # 수정된 부분: Estimator의 옵티마이저 상태도 저장합니다.
+        # ▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼
+        #
+        if hasattr(self, 'payload_estimator_optimizer') and self.payload_estimator_optimizer is not None:
+             state['payload_estimator_optimizer'] = self.payload_estimator_optimizer.state_dict()
+        #
+        # ▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲
+        
+
         if self.has_central_value:
             state['assymetric_vf_nets'] = self.central_value_net.state_dict()
 
@@ -632,20 +642,31 @@ class A2CBase(BaseAlgorithm):
         return state
 
     def set_full_state_weights(self, weights, set_epoch=True):
-
         self.set_weights(weights)
         if set_epoch:
             self.epoch_num = weights['epoch']
             self.frame = weights['frame']
 
-        if self.has_central_value:
-            self.central_value_net.load_state_dict(weights['assymetric_vf_nets'])
+        if 'optimizer' in weights:
+            self.optimizer.load_state_dict(weights['optimizer'])
 
-        self.optimizer.load_state_dict(weights['optimizer'])
+        #
+        # ▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼
+        # 수정된 부분: Estimator의 옵티마이저 상태를 불러옵니다.
+        # ▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼
+        #
+        if hasattr(self, 'payload_estimator_optimizer') and self.payload_estimator_optimizer is not None and 'payload_estimator_optimizer' in weights:
+            self.payload_estimator_optimizer.load_state_dict(weights['payload_estimator_optimizer'])
+        #
+        # ▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲
+        #
+
+        if self.has_central_value and 'assymetric_vf_nets' in weights:
+            self.central_value_net.load_state_dict(weights['assymetric_vf_nets'])
 
         self.last_mean_rewards = weights.get('last_mean_rewards', -1000000000)
 
-        if self.vec_env is not None:
+        if self.vec_env is not None and 'env_state' in weights:
             env_state = weights.get('env_state', None)
             self.vec_env.set_env_state(env_state)
 
