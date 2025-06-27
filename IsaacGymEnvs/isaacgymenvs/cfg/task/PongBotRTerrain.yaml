@@ -1,0 +1,298 @@
+# used to create the object
+name: PongBotRTerrain
+
+physics_engine: 'physx'
+
+env:
+  numEnvs: ${resolve_default:4096,${...num_envs}}
+  numObservations: 54   # 53 + 1(payload mass)
+  numEstimatorObservations: 72 # 예시: (dof_pos, dof_vel, actions) x 2개 스텝 = (12+12+12)*2 = 72 (필요에 따라 정의) , for payload
+  observeSteps: 1       # how many sample data(time step) in history buffer  
+  numActions: 12
+  numStates: 87
+  envSpacing: 0.5  # [m]
+  enableDebugVis: False
+  test: False
+  
+  terrain:
+    terrainType: plane # none, plane, or trimesh
+    staticFriction: 1. # [-]
+    dynamicFriction: 1.  # [-]
+    restitution: 0.5        # [-]
+    # rough terrain only:
+    curriculum: true
+    maxInitMapLevel: 0
+    mapLength: 8.
+    mapWidth: 8.
+    numLevels: 10
+    numTerrains: 30
+    # terrain types: [smooth slope, rough slope, stairs up, stairs down, discrete]
+    # terrainProportions: [0.1, 0.1, 0.1, 0.1, 0.1, 0.5]
+    terrainProportions: [0.2, 0.2, 0.15, 0.2, 0.18]
+    # tri mesh only:
+    slopeTreshold: 0.25
+
+  baseInitState:
+    pos: [0.0, 0.0, 0.56] # x,y,z [m]
+    rot: [0.0, 0.0, 0.0, 1.0] # x,y,z,w [quat]
+    vLinear: [0.0, 0.0, 0.0]  # x,y,z [m/s]
+    vAngular: [0.0, 0.0, 0.0]  # x,y,z [rad/s]
+
+  randomCommandVelocityRanges:
+    # train
+    linear_x: [-0.5, 0.5] # min max [m/s]
+    linear_y: [-0.5, 0.5]   # min max [m/s]
+    yaw: [-1.57, 1.57]    # min max [rad/s]
+
+  # 환경 갯수
+  EnvsNumRanges:
+    stand_env_range               : 200
+    only_plus_x_envs_range        : 200
+    only_minus_x_envs_range       : 200
+    only_plus_y_envs_range        : 200
+    only_minus_y_envs_range       : 200
+    only_plus_yaw_envs_range      : 200
+    only_minus_yaw_envs_range     : 200
+    plus_x_plus_yaw_envs_range    : 200
+    plus_x_minus_yaw_envs_range   : 200
+    minus_x_plus_yaw_envs_range   : 200
+    minus_x_minus_yaw_envs_range  : 200
+
+
+  control:
+    # PD Drive parameters:
+    stiffness: 450.0  # [N*m/rad]
+    damping: 9.0     # [N*m*s/rad]
+    # action scale: target angle = actionScale * action + defaultAngle
+    actionScale: 0.5
+    # decimation: Number of control action updates @ sim DT per policy DT
+    decimation: 4
+
+  defaultJointAngles:  # = target angles when action = 0.0   # 워크레디 값
+    FL_HR_JOINT : 0.
+    FR_HR_JOINT : 0.
+    RL_HR_JOINT : 0.
+    RR_HR_JOINT : 0.
+
+    FL_HP_JOINT : 0.75
+    FR_HP_JOINT : 0.75
+    RL_HP_JOINT : 0.75
+    RR_HP_JOINT : 0.75 
+
+    FL_KN_JOINT : -1.5
+    FR_KN_JOINT : -1.5
+    RL_KN_JOINT : -1.5
+    RR_KN_JOINT : -1.5
+
+ 
+  urdfAsset:
+    # file: "urdf/anymal_c/urdf/anymal_minimal.urdf"
+    # file: "urdf/minipb_ver2/urdf/minipb_ver3.urdf"
+    # test_file: "urdf/minipb_ver2/urdf/minipb_ver3(view).urdf"
+    file: "urdf/PongBot_R_V1/urdf/PongBot_R_V1_(train).urdf"
+    test_file: "urdf/PongBot_R_V1/urdf/PongBot_R_V1_(train).urdf"
+    # file: "urdf/PongBot_R_V1/urdf/PongBot_R_V1.urdf"
+    # test_file: "urdf/PongBot_R_V1/urdf/PongBot_R_V1.urdf"
+
+    footName: TIP # SHANK if collapsing fixed joint, FOOT otherwise
+    calfName: CALF
+    collapseFixedJoints: False
+    fixBaseLink: False 
+    defaultDofDriveMode: 4 # see GymDofDriveModeFlags (0 is none, 1 is pos tgt, 2 is vel tgt, 4 effort)
+
+  learn:
+    addNoise: true
+    noiseLevel: 1.25 # scales other values
+    dofPositionNoise: 0.025
+    dofVelocityNoise: 2.
+    angularVelocityNoise: 0.3
+    gravityNoise: 0.05
+    heightMeasurementNoise: 0.06
+
+    allowcalfContacts: True
+    soft_dof_pos_limit: 0.9
+    # rewards
+    reward:
+      # # Task Rewards (Pos) 
+      # rew_lin_vel_x               : 1.5
+      # rew_lin_vel_y               : 1.5
+      rew_ang_vel_z               : 2.
+      rew_lin_vel_xy              : 2.5
+
+      # reward_vel_following          : 1.5
+      # reward_target_distance        : 1.5
+      # reward_direction_similarity   : 1.5
+
+      # Task Penaltys (Neg)
+      penalty_lin_vel_z           : -0.0 #p : 2.5
+      penalty_ang_vel_xy          : -0.0
+      penalty_base_acc            : -0.0
+      penalty_base_ori            : -2.
+      penalty_base_height         : -2. #p
+      penalty_collision           : -0.075
+      # penalty_stumble             : -0.0  #p
+      penalty_roll_pos            : -0.25
+      penalty_slip                : -0.25
+      penalty_num_contact_feet    : -0.
+      penalty_zero_contact_feet   : -0.
+      penalty_default_num_contact_feet  : -0.25
+      penalty_foot_height         : -2.
+      penalty_short_swing         : -0.0
+      penalty_global_foot_xy_forces : -0.00
+      # penalty_foot_vel            : -0.0
+      # penalty_foot_height_in_terrain : -0.
+      # penalty_swing_phase         : -0.001 # p : -0.05
+      penalty_swing_stance_phase : -0.005 # p : -0.05
+      penalty_dof_pos_limits      : -3.5
+      penalty_default_pos_hp      : -0.25
+      penalty_default_pos_knp     : -0.25
+      penalty_default_pos_standing: -1.
+      penalty_zero_vel_standing   : -0.00
+      penalty_trot_pitch          : -0.0
+      penalty_foot_contact_force  : -0.00000
+      # penalty_base_pos            : -0.
+      penalty_base_foot_xy_pos     : -0.
+      # penalty_vel_violation       : -0.
+      penalty_default_grf      : -0.005
+      penalty_dof_acc_zero_crossing: -0.0
+
+      # Regulation Penaltys (Neg)
+      penalty_torques             : -0.0001
+      penalty_over_nominal        : -0.0001
+      penalty_action_smoothness1  : -0.0025
+      penalty_action_smoothness2  : -0.0025
+      penalty_joint_vel           : -0.0045
+      penalty_actions             : -0.05
+
+    obs_scales:
+      dofPositionScale            : 1.0
+      dofVelocityScale            : 0.1
+      angularVelocityScale        : 0.25
+    
+
+    #randomization
+    randomizeFriction: true
+    frictionRange: [0.5, 1.25]
+    pushRobots: true
+    pushInterval_s: 14
+    # pushInterval_s: 0
+    cmdInterval_s: 13
+    zerocmdInterval_s: 10
+    freezecmdInterval_s : 30
+
+
+    # episode length in seconds
+    episodeLength_s: 20
+  # viewer cam:
+  viewer:
+    refEnv: 0
+    pos: [0, 0, 10]  # [m]
+    lookat: [1., 1, 9]  # [m]
+
+  # set to True if you use camera sensors in the environment
+  enableCameraSensors: False
+
+sim:
+  dt: 0.002  # sim dt, policy dt : dt * (decimation + 1)
+  substeps: 1
+  up_axis: "z"
+  use_gpu_pipeline: ${eq:${...pipeline},"gpu"}
+  gravity: [0.0, 0.0, -9.81]
+  physx:
+    num_threads: ${....num_threads}
+    solver_type: ${....solver_type}
+    use_gpu: ${contains:"cuda",${....sim_device}} # set to False to run on CPU
+    num_position_iterations: 6 # 1~255
+    num_velocity_iterations: 1 # 1~255
+    contact_offset: 0.02
+    rest_offset: 0.0
+    bounce_threshold_velocity: 0.2
+    max_depenetration_velocity: 100.0
+    default_buffer_size_multiplier: 5.0
+    max_gpu_contact_pairs: 8388608 # 12582912 #10485760 #8388608 # 8*1024*1024
+    num_subscenes: ${....num_subscenes}
+    contact_collection: 1 # 0: CC_NEVER (don't collect contact info), 1: CC_LAST_SUBSTEP (collect only contacts on last substep), 2: CC_ALL_SUBSTEPS (broken - do not use!)
+  # foundLostAggregatePairsCapacity: 10049151  # 이 줄을 추가
+task:
+  # randomize: False
+  randomize: True      
+  randomization_params:
+    frequency: 500   # Define how many environment steps between generating new randomizations
+    observations:
+      range: [0, 0.05] # range for the white noise
+      operation: "additive"
+      distribution: "gaussian"
+    actions:
+      range: [0., 0.05]
+      operation: "additive" # or scaling (곱셈)
+      distribution: "gaussian"
+    sim_params: 
+      gravity:
+        range: [0, 0.05]
+        operation: "additive"
+        distribution: "gaussian"
+        schedule: "quadratic"  # "linear" will linearly interpolate be어제: 학습코드 스터디, 연구주제 구체화
+
+        schedule_steps: 100 # 500번째 스텝까지만 선형적 증가 이후엔 항상 최대 
+
+    actor_params:
+      pongbotr:
+        rigid_body_properties:
+          mass: 
+            range: [0.75, 1.25]
+            operation: "scaling"
+            distribution: "uniform"
+            setup_only: True # Property will only be randomized once before simulation is started. See Domain Randomization Documentation for more info.
+            schedule: "linear"  # "linear" will linearly interpolate between no rand and max rand
+            schedule_steps: 100
+        rigid_shape_properties:
+          friction:
+            num_buckets: 500
+            range: [0., 0.]
+            operation: "additive"
+            distribution: "uniform"
+            schedule: "linear"  # "linear" will scale the current random sample by `min(current num steps, schedule_steps) / schedule_steps`
+            schedule_steps: 100
+          restitution:
+            range: [0., 0.7]
+            operation: "scaling"
+            distribution: "uniform"
+            schedule: "linear"  # "linear" will scale the current random sample by `min(current num steps, schedule_steps) / schedule_steps`
+            schedule_steps: 100
+        dof_properties:
+          damping: 
+            range: [0.5, 1.5]
+            operation: "scaling"
+            distribution: "uniform"
+            schedule: "linear"  # "linear" will scale the current random sample by `min(current num steps, schedule_steps) / schedule_steps`
+            schedule_steps: 200
+          stiffness: 
+            range: [0.75, 1.25]
+            operation: "scaling"
+            distribution: "uniform"
+            schedule: "linear"  # "linear" will scale the current random sample by `min(current num steps, schedule_steps) / schedule_steps`
+            schedule_steps: 100
+          lower:
+            range: [-0.05, 0.05]
+            operation: "additive"
+            distribution: "gaussian"
+            schedule: "linear"  # "linear" will scale the current random sample by `min(current num steps, schedule_steps) / schedule_steps`
+            schedule_steps: 100
+          upper:
+            range: [-0.05, 0.05]
+            operation: "additive"
+            distribution: "gaussian"
+            schedule: "linear"  # "linear" will scale the current random sample by `min(current num steps, schedule_steps) / schedule_steps`
+            schedule_steps: 100
+          friction:
+            range: [0.0, 0.0001]
+            operation: "additive"
+            distribution: "uniform"
+            schedule: "linear"  # "linear" will scale the current random sample by `min(current num steps, schedule_steps) / schedule_steps`
+            schedule_steps: 200
+          armature:
+            range: [0.0, 0.0001]
+            operation: "additive"
+            distribution: "uniform"
+            schedule: "linear"  # "linear" will scale the current random sample by `min(current num steps, schedule_steps) / schedule_steps`
+            schedule_steps: 100
