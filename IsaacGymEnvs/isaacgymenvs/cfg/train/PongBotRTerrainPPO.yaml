@@ -93,6 +93,7 @@ params:
     print_stats: True
 
     estimator_lr: 1e-4 
+    normalize_estimator_input: True 
 
 
     # central_value_config:

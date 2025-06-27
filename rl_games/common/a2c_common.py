@@ -621,25 +621,31 @@ class A2CBase(BaseAlgorithm):
         if self.has_central_value:
             state['assymetric_vf_nets'] = self.central_value_net.state_dict()
 
-        # This is actually the best reward ever achieved. last_mean_rewards is perhaps not the best variable name
-        # We save it to the checkpoint to prevent overriding the "best ever" checkpoint upon experiment restart
         state['last_mean_rewards'] = self.last_mean_rewards
 
         if self.vec_env is not None:
             env_state = self.vec_env.get_env_state()
             state['env_state'] = env_state
+            
+        # 페이로드 추정기가 존재하면 관련 상태들을 state 딕셔너리에 추가합니다.
+        if hasattr(self, 'has_payload_estimator') and self.has_payload_estimator:
+            state['payload_estimator_model'] = self.payload_estimator_model.state_dict()
+            state['estimator_optimizer'] = self.payload_estimator_optimizer.state_dict()
+            if self.normalize_estimator_input:
+                state['estimator_obs_rms'] = self.estimator_obs_rms.state_dict()
 
         return state
-
     def set_full_state_weights(self, weights, set_epoch=True):
 
         self.set_weights(weights)
         if set_epoch:
-            self.epoch_num = weights['epoch']
-            self.frame = weights['frame']
+            self.epoch_num = weights.get('epoch', 0)
+            self.frame = weights.get('frame', 0)
 
         if self.has_central_value:
-            self.central_value_net.load_state_dict(weights['assymetric_vf_nets'])
+            # assymetric_vf_nets 키가 없는 구버전 체크포인트 호환을 위해 get 사용
+            if weights.get('assymetric_vf_nets'):
+                self.central_value_net.load_state_dict(weights['assymetric_vf_nets'])
 
         self.optimizer.load_state_dict(weights['optimizer'])
 
@@ -647,7 +653,20 @@ class A2CBase(BaseAlgorithm):
 
         if self.vec_env is not None:
             env_state = weights.get('env_state', None)
-            self.vec_env.set_env_state(env_state)
+            if env_state:
+                self.vec_env.set_env_state(env_state)
+        
+        # 체크포인트에 추정기 관련 상태가 있으면 로드합니다.
+        if hasattr(self, 'has_payload_estimator') and self.has_payload_estimator:
+            if 'payload_estimator_model' in weights:
+                self.payload_estimator_model.load_state_dict(weights['payload_estimator_model'])
+            
+            if 'estimator_optimizer' in weights:
+                self.payload_estimator_optimizer.load_state_dict(weights['estimator_optimizer'])
+            
+            # 정규화 옵션이 켜져있고, 체크포인트에 rms 상태가 있을 경우에만 로드
+            if hasattr(self, 'normalize_estimator_input') and self.normalize_estimator_input and 'estimator_obs_rms' in weights:
+                self.estimator_obs_rms.load_state_dict(weights['estimator_obs_rms'])
 
     def get_weights(self):
         state = self.get_stats_weights()
@@ -935,9 +954,8 @@ class DiscreteA2CBase(A2CBase):
 
     def init_tensors(self):
         A2CBase.init_tensors(self)
-        self.update_list = ['actions', 'neglogpacs', 'values']
-        if self.use_action_masks:
-            self.update_list += ['action_masks']
+        self.update_list = ['actions', 'neglogpacs', 'values', 'mus', 'sigmas']
+        # self.tensor_list에 추정기용 데이터 키 추가
         self.tensor_list = self.update_list + ['obses', 'states', 'dones', 'estimator_obses', 'true_payloads']
 
     def train_epoch(self):
@@ -1041,8 +1059,10 @@ class DiscreteA2CBase(A2CBase):
         dataset_dict['rnn_masks'] = rnn_masks
 
         # for payload
-        dataset_dict['estimator_obs'] = batch_dict['estimator_obses']
-        dataset_dict['true_payloads'] = batch_dict['true_payloads']
+        if 'estimator_obses' in batch_dict:
+            dataset_dict['estimator_obs'] = batch_dict['estimator_obses']
+        if 'true_payloads' in batch_dict:
+            dataset_dict['true_payloads'] = batch_dict['true_payloads']
 
         if self.use_action_masks:
             dataset_dict['action_masks'] = batch_dict['action_masks']
