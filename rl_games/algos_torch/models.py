@@ -240,25 +240,11 @@ class ModelA2CContinuousLogStd(BaseModel):
     def __init__(self, network):
         BaseModel.__init__(self, 'a2c')
         self.network_builder = network
-        # ▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼
-        # 수정된 부분: ModelBuilder에서 전달된 estimator_network 빌더를 저장합니다.
-        # ▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼
-        #
-        self.estimator_network_builder = kwargs.get('estimator_network', None)
-        #
-        # ▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲
 
     class Network(BaseModelNetwork):
         def __init__(self, a2c_network, **kwargs):
             BaseModelNetwork.__init__(self, **kwargs)
             self.a2c_network = a2c_network
-            # ▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼
-            # 수정된 부분: ModelBuilder.build에서 생성된 estimator 신경망을 받아서 클래스 속성으로 저장합니다.
-            # ▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼
-            #
-            self.estimator = kwargs.get('estimator', None)
-            #
-            # ▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲
 
         def is_rnn(self):
             return self.a2c_network.is_rnn()
@@ -276,21 +262,6 @@ class ModelA2CContinuousLogStd(BaseModel):
             mu, logstd, value, states = self.a2c_network(input_dict)
             sigma = torch.exp(logstd)
             distr = torch.distributions.Normal(mu, sigma, validate_args=False)
-
-            # ▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼
-            # 수정된 부분: Estimator 신경망을 실행하고 결과를 저장합니다.
-            # ▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼
-            #
-            estimated_payload = None
-            if self.estimator is not None and 'estimator_obs' in input_dict:
-                estimator_input = {'obs': input_dict['estimator_obs']}
-                # Estimator의 출력은 (value, states) 튜플이므로 첫 번째 원소만 사용합니다.
-                estimated_payload, _ = self.estimator(estimator_input)
-            #
-            # ▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲
-
-
-
             if is_train:
                 entropy = distr.entropy().sum(dim=-1)
                 prev_neglogp = self.neglogp(prev_actions, mu, sigma, logstd)
@@ -320,45 +291,6 @@ class ModelA2CContinuousLogStd(BaseModel):
             return 0.5 * (((x - mean) / std)**2).sum(dim=-1) \
                 + 0.5 * np.log(2.0 * np.pi) * x.size()[-1] \
                 + logstd.sum(dim=-1)
-        
-    # ▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼
-    # 수정된 부분: build 메소드를 오버라이드하여 policy와 estimator를 모두 생성합니다.
-    # ▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼
-    #
-    def build(self, config):
-        # Policy Network 생성
-        obs_shape = config['input_shape']
-        normalize_value = config.get('normalize_value', False)
-        normalize_input = config.get('normalize_input', False)
-        value_size = config.get('value_size', 1)
-        a2c_network = self.network_builder.build('a2c', **config)
-        
-        estimator_nn = None
-        if self.estimator_network_builder is not None:
-            print("Building the estimator nn.Module...")
-            
-            # train.py에서 전달한 전체 환경 설정에서 estimator의 입력 크기를 가져옵니다.
-            estimator_obs_shape = (config['env_config_full']['env']['numEstimatorObservations'],)
-            
-            estimator_config = {
-                'input_shape' : estimator_obs_shape,
-                'actions_num' : 1, # Estimator는 하나의 값(payload)을 예측
-                'action_space': gym.spaces.Box(low=-1, high=1, shape=(1,)), # 더미 action space
-                'num_seqs': config.get('num_actors', 1),
-                'value_size': 1, # Estimator의 출력 크기는 1
-                'normalize_value': False, 
-                'normalize_input': config['normalize_input'],
-                'central_value': True
-            }
-            # A2CBuilder를 사용하여 estimator 신경망을 생성합니다.
-            estimator_nn = self.estimator_network_builder.build('a2c', **estimator_config)
-
-        # policy 신경망과 생성된 estimator 신경망을 Network 클래스에 전달합니다.
-        return self.Network(a2c_network, obs_shape=obs_shape,
-                            normalize_value=normalize_value, normalize_input=normalize_input, 
-                            value_size=value_size, estimator=estimator_nn)
-    #
-    # ▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲
 
 
 class ModelCentralValue(BaseModel):
